@@ -131,7 +131,7 @@ def get_blocks(num_layers):
     return blocks
 
 
-class Backbone(BaseModel):
+class Backbone(Module):
     def __init__(self, num_layers, drop_ratio, mode='ir'):
         super(Backbone, self).__init__()
         assert num_layers in [50, 100,
@@ -230,3 +230,21 @@ class Am_softmax(Module):
         output[index] = phi[index]  # only change the correct predicted output
         output *= self.s  # scale up in order to make softmax work, first introduced in normface
         return output
+
+
+class FaceModelIRSE(BaseModel):
+    def __init__(self, num_layers=50, drop_ratio=0.6, embedding_size=512, classnum=51332):
+        super().__init__()
+        self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
+        self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+
+    def forward(self, x, label):
+        embedding = self.embedding(x)
+        classification = self.classify(embedding, label)
+        return classification
+
+    def embedding(self, x):
+        return self.backbone(x)
+
+    def classify(self, embedding, label):
+        return self.archead(embedding, label)
