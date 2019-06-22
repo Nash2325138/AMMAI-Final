@@ -6,8 +6,6 @@ sys.path.append(os.path.dirname(os.path.dirname(
 
 import torch
 from base.base_model import BaseModel
-from utils.logging_config import logger
-import global_variables
 from torch.nn import (Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU,
                       Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d,
                       Sequential, Module, Parameter)
