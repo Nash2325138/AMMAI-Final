@@ -1,0 +1,10 @@
+{
+    "name": "Arcface_IR_SE50",
+    "arch": {
+        "type": "Backbone",
+        "args": {
+            "num_layers": 50,
+            "drop_ratio": 0.6
+        }
+    }
+}

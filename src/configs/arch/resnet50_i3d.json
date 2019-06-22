@@ -1,8 +1,0 @@
-{
-    "name": "Resnet50_I3D",
-    "arch": {
-        "type": "ResnetI3D",
-        "args": {
-        }
-    }
-}
