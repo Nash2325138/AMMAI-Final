@@ -231,10 +231,13 @@ class Am_softmax(Module):
 
 
 class FaceModelIRSE(BaseModel):
-    def __init__(self, num_layers=50, drop_ratio=0.6, embedding_size=512, classnum=51332):
+    def __init__(self, num_layers=50, drop_ratio=0.6, embedding_size=512, classnum=51332,
+                 backbone_weights=None):
         super().__init__()
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
         self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+        if backbone_weights is not None:
+            self.backbone.load_state_dict(torch.load(backbone_weights))
 
     def forward(self, x, label):
         embedding = self.embedding(x)
