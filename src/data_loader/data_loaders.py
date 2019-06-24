@@ -1,17 +1,13 @@
 import os
-import json
-import random
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))  # noqa
 
 from torch.utils.data.dataset import Dataset
-from PIL import Image, ImageDraw
+from PIL import Image
 from torchvision import transforms
-import numpy as np
-import torch
 
 from base.base_data_loader import BaseDataLoader
-from utils.logging_config import logger
+# from utils.logging_config import logger
 
 
 class AsiaLegisDataLoader(BaseDataLoader):
@@ -39,13 +35,17 @@ class AsiaLegisDataSet(Dataset):
     ):
         self.data_root = data_root
         self.augmentation = augmentation
-        self.test_trasnform = transforms.Compose([
+        self.test_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])  # Following https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/config.py
         self.data_table = self.read_pairs()
 
-    def read_pairs():
+    def read_pairs(self):
+        """
+        Read pairs.txt to build a data table where each entry has a following structure:
+        (is_the_same: bool, person1: str, faceID1: str, person2: str, faceID2: str)
+        """
         with open(os.path.join(self.data_root, "pairs.txt"), 'r') as f:
             lines = f.readlines()
         data_table = []
@@ -60,7 +60,27 @@ class AsiaLegisDataSet(Dataset):
             data_table.append(entry)
         return data_table
 
+    def get_image(self, person, faceID):
+        return Image.open(os.path.join(self.data_root, 'C', f'{person}_{faceID}.jpg'))
+
     def __getitem__(self, index):
+        """
+        Read data in data_table[index] and return a dictionary:
+            {
+                'f1': tensor of the normalized face 1
+                'f2': tensor of the normalized face 2
+                'is_same': whether f1 and f2 have the same identity (bool)
+            }
+        """
+        entry = self.data_table[index]
+        f1_image = self.get_image(entry[1], entry[2])
+        f2_image = self.get_image(entry[3], entry[4])
+        is_same = entry[0]
+        return {
+            'f1': self.test_transform(f1_image),
+            'f2': self.test_transform(f2_image),
+            'is_same': is_same
+        }
 
     def __len__(self):
         return len(self.data_table)

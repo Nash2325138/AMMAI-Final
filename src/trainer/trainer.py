@@ -4,7 +4,7 @@ import torch
 from torchvision.utils import make_grid
 
 from base.base_trainer import BaseTrainer
-from utils.util import get_lr, flow_to_image, in_channel_map
+from utils.util import get_lr
 
 
 class Trainer(BaseTrainer):
@@ -26,8 +26,6 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = log_step
         self.show_all_loss = show_all_loss
-        self.finetune_fc_epoch = finetune_fc_epoch
-        self.finetune_first_conv_epoch = finetune_first_conv_epoch
 
     def _eval_metrics(self, data_input, model_output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -35,25 +33,6 @@ class Trainer(BaseTrainer):
             acc_metrics[i] += metric(data_input, model_output)
             self.writer.add_scalar(f'{metric.__name__}', acc_metrics[i])
         return acc_metrics
-
-    def _set_finetune(self, epoch):
-        if self.finetune_fc_epoch is not None:
-            # Tune only the last fc layer for some epochs
-            if epoch <= self.finetune_fc_epoch:
-                self.logger.info('Currently tuning only the last layer.')
-                self.model.set_finetune_mode('fc')
-            else:
-                self.logger.info('Currently tuning the whole model.')
-                self.model.set_finetune_mode('all')
-
-        if self.finetune_first_conv_epoch is not None:
-            # Tune only the last fc layer for some epochs
-            if epoch <= self.finetune_first_conv_epoch:
-                self.logger.info('Currently tuning only the first convolution.')
-                self.model.set_finetune_mode('first_conv')
-            else:
-                self.logger.info('Currently tuning the whole model.')
-                self.model.set_finetune_mode('all')
 
     def _train_epoch(self, epoch):
         """
@@ -75,7 +54,6 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.logger.info(f'Current lr: {get_lr(self.optimizer)}')
         epoch_start_time = time.time()
-        self._set_finetune(epoch)
 
         total_loss = 0
         total_metrics = np.zeros(len(self.metrics))
@@ -106,7 +84,7 @@ class Trainer(BaseTrainer):
                     f'loss_total: {loss.item():.6f}, '
                     f'BT: {time.time() - batch_start_time:.2f}s'
                 )
-                self._write_images(data_input, model_output)
+                self._write_tfboard(data_input, model_output)
 
         log = {
             'epoch_time': time.time() - epoch_start_time,
@@ -164,22 +142,23 @@ class Trainer(BaseTrainer):
                 total_val_loss += loss.item()
                 total_val_metrics += self._eval_metrics(data_input, model_output)
                 if self.verbosity >= 2 and batch_idx % self.log_step == 0:
-                    self._write_images(data_input, model_output)
+                    self._write_tfboard(data_input, model_output)
 
         return {
             f'{loader.name}_loss': total_val_loss / len(loader),
             f'{loader.name}_metrics': (total_val_metrics / len(loader)).tolist()
         }
 
-    def _write_images(self, data_input, model_output):
-        for modality in in_channel_map.keys():
-            if f"{modality}_video" in data_input.keys():
-                frames = data_input[f'{modality}_video'][0].transpose(0, 1)
-                if modality == 'flow':
-                    frames = flow_to_image(frames)
-                self.writer.add_image(f'input_{modality}', make_grid(frames, nrow=4, normalize=True))
+    def _write_tfboard(self, data_input, model_output, n=4):
+        f1 = data_input['f1'][: n]
+        f2 = data_input['f2'][: n]
 
-    def inference(self, data_loader, saved_keys=['verb_logits', 'noun_logits', 'uid']):
+        self.writer.add_image('f1', make_grid(f1, nrow=4, normalize=False))
+        self.writer.add_image('f2', make_grid(f2, nrow=4, normalize=False))
+        self.writer.add_text(', '.join(['same' if is_same else 'diff'
+                                        for is_same in data_input['is_same'][: n]]))
+
+    def inference(self, data_loader, saved_keys=[]):
         self.model.eval()
         self.logger.info(f'Inferencing with following keys to save: {saved_keys}')
         self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
