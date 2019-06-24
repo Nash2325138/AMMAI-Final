@@ -31,10 +31,8 @@ class AsiaLegisDataLoader(BaseDataLoader):
 class AsiaLegisDataSet(Dataset):
     def __init__(
         self, data_root,
-        augmentation=True
     ):
         self.data_root = data_root
-        self.augmentation = augmentation
         self.test_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])

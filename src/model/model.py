@@ -243,11 +243,13 @@ class FaceModelIRSE(BaseModel):
         x = data_input['face_tensor']
         label = data_input['label']
         embedding = self.embedding(x)
-        classification = self.classify(embedding, label)
-        return classification
+        logits = self.logits(embedding, label)
+        return {
+            'logits': logits
+        }
 
     def embedding(self, x):
         return self.backbone(x)
 
-    def classify(self, embedding, label):
+    def logits(self, embedding, label):
         return self.archead(embedding, label)
