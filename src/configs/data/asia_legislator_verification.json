@@ -4,7 +4,7 @@
         "type": "AsiaLegisDataLoader",
         "args":{
             "name": "test",
-            "batch_size": 12,
+            "batch_size": 120,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 4,
@@ -18,7 +18,7 @@
             "type": "AsiaLegisDataLoader",
             "args":{
                 "name": "test",
-                "batch_size": 12,
+                "batch_size": 120,
                 "shuffle": false,
                 "validation_split": 0.0,
                 "num_workers": 4,

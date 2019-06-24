@@ -178,4 +178,5 @@ class Trainer(BaseTrainer):
                 if batch_idx % 10 == 0:
                     self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
         self.logger.info('ROC data:')
-        self.logger.info(self.evaluator.calculate_roc(n_thres=10))
+        self.logger.info(self.evaluator.calculate_roc(n_thres=50, strategy='cosine'))
+        self.logger.info(self.evaluator.calculate_roc(n_thres=50, strategy='l2_dist'))
