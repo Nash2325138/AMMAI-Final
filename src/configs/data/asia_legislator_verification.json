@@ -25,6 +25,7 @@
                 "dataset_args": {
                     "data_root": "../datasets/asia_legistator_dataset/"
                 }
+            }
         }
     ]
 }

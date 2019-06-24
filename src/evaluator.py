@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import scipy.spatial.distance.cosine as cosine_dist
+from scipy.spatial.distance import cosine as cosine_dist
 
 
 # copied from https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/verifacation.py
