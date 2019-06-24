@@ -5,6 +5,7 @@ from torchvision.utils import make_grid
 
 from base.base_trainer import BaseTrainer
 from utils.util import get_lr
+from evaluator import Evaluator
 
 
 class Trainer(BaseTrainer):
@@ -26,6 +27,7 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = log_step
         self.show_all_loss = show_all_loss
+        self.evaluator = Evaluator()
 
     def _eval_metrics(self, data_input, model_output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -158,32 +160,22 @@ class Trainer(BaseTrainer):
         self.writer.add_text(', '.join(['same' if is_same else 'diff'
                                         for is_same in data_input['is_same'][: n]]))
 
-    def inference(self, data_loader, saved_keys=[]):
+    def verify(self, data_loader):
         self.model.eval()
-        self.logger.info(f'Inferencing with following keys to save: {saved_keys}')
         self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
-        saved_results = {k: [] for k in saved_keys}
+        self.evaluator.clear()
 
         with torch.no_grad():
             for batch_idx, data_input in enumerate(data_loader):
                 self.writer.set_step(batch_idx, 'inference')
                 for key in data_input.keys():
                     value = data_input[key]
-                    if key in saved_keys:
-                        saved_value = value.numpy() if torch.is_tensor(value) else value
-                        saved_results[key].extend([v for v in saved_value])
                     data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                model_output = self.model(data_input)
-                for key in model_output.keys():
-                    if key in saved_keys:
-                        saved_results[key].extend([v for v in model_output[key].cpu().numpy()])
-
-                if batch_idx == 0:
-                    non_exists_keys = [key for key in saved_keys if len(saved_results[key]) == 0]
-                    if len(non_exists_keys) > 0:
-                        self.logger.warning(f'Keys {non_exists_keys} not exists')
+                source_embedding = self.model.embedding(data_input['f1'])
+                target_embedding = self.model.embedding(data_input['f2'])
+                self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
                 if batch_idx % 10 == 0:
                     self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
-
-        return saved_results
+        self.logger.info('ROC data:')
+        self.logger.info(self.evaluator.calculate_roc(n_thres=10))

@@ -74,18 +74,8 @@ def main(config, args):
         trainer.load_pretrained(args.pretrained)
 
     if args.mode == 'test':
-        # this line is to solve the error described in https://github.com/pytorch/pytorch/issues/973
-        torch.multiprocessing.set_sharing_strategy('file_system')
-        saved_keys = ['verb_logits', 'noun_logits', 'uid', 'verb_class', 'noun_class']
         for loader in trainer.valid_data_loaders:
-            file_path = os.path.join(args.save_dir, loader.name + '.pkl')
-            if os.path.exists(file_path) and args.skip_exists:
-                logger.warning(f'Skipping inference and saving {file_path}')
-                continue
-            inference_results = trainer.inference(loader, saved_keys)
-            with open(file_path, 'wb') as f:
-                logger.info(f'Saving results on loader {loader.name} into {file_path}')
-                pickle.dump(inference_results, f)
+            trainer.verify(loader)
     else:
         trainer.train()
 
@@ -144,6 +134,6 @@ if __name__ == '__main__':
     if args.device:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
-    global_variables.global_config = config.get('global_config', {})
+    global_variables.config = config
     logger.info(f'Experiment name: {config["name"]}')
     main(config, args)

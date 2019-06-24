@@ -41,6 +41,10 @@ class Evaluator():
             container.append(element)
         self.prepared = False
 
+    def clear(self):
+        self.source_emb, self.target_emb, self.is_same = [], [], []
+        self.prepared = False
+
     def prepare(self):
         """
         This function concatenates the collected datas.
