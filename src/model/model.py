@@ -130,7 +130,7 @@ def get_blocks(num_layers):
 
 
 class Backbone(Module):
-    def __init__(self, num_layers, drop_ratio, mode='ir'):
+    def __init__(self, num_layers, drop_ratio, mode='ir_se'):
         super(Backbone, self).__init__()
         assert num_layers in [50, 100,
                               152], 'num_layers should be 50,100, or 152'
@@ -237,7 +237,8 @@ class FaceModelIRSE(BaseModel):
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
         self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
         if backbone_weights is not None:
-            self.backbone.load_state_dict(torch.load(backbone_weights))
+            state = torch.load(backbone_weights)
+            self.backbone.load_state_dict(state)
 
     def forward(self, data_input):
         x = data_input['face_tensor']
