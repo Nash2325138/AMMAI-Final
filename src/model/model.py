@@ -239,7 +239,9 @@ class FaceModelIRSE(BaseModel):
         if backbone_weights is not None:
             self.backbone.load_state_dict(torch.load(backbone_weights))
 
-    def forward(self, x, label):
+    def forward(self, data_input):
+        x = data_input['face_tensor']
+        label = data_input['label']
         embedding = self.embedding(x)
         classification = self.classify(embedding, label)
         return classification
