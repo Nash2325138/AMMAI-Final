@@ -1,8 +1,12 @@
 import os
+import io
 from glob import glob
 
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
+from torchvision import transforms as trans
+from PIL import Image
 
 
 def ensure_dir(path):
@@ -220,3 +224,39 @@ def softmax(data):
     assert np.isclose(data[0].sum(), 1)
     assert np.isclose(data[-1].sum(), 1)
     return data
+
+
+def gen_roc_plot(fpr, tpr, return_tensor=False):
+    """Create a pyplot plot and save to buffer."""
+    plt.figure()
+    plt.xlabel("FPR", fontsize=14)
+    plt.ylabel("TPR", fontsize=14)
+    plt.title("ROC Curve", fontsize=14)
+    plt.plot(fpr, tpr, linewidth=2)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    buf.seek(0)
+    plt.close()
+    if return_tensor:
+        roc_curve = Image.open(buf)
+        roc_curve_tensor = trans.ToTensor()(roc_curve)
+        return roc_curve_tensor
+    else:
+        return buf
+
+
+def gen_acc_thres_plot(thres, accs, return_tensor=False):
+    plt.figure()
+    plt.xlabel("threshold", fontsize=14)
+    plt.ylabel("accuracy", fontsize=14)
+    plt.plot(thres, accs, linewidth=2)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    buf.seek(0)
+    plt.close()
+    if return_tensor:
+        curve = Image.open(buf)
+        curve_tensor = trans.ToTensor()(curve)
+        return curve_tensor
+    else:
+        return buf

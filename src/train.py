@@ -70,7 +70,7 @@ def main(config, args):
 
     if args.mode == 'test':
         for loader in trainer.valid_data_loaders:
-            trainer.verify(loader)
+            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to)
     else:
         trainer.train()
 
@@ -100,7 +100,15 @@ def parse_args():
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('--mode', type=str, choices=['train', 'test'], default='train')
+    parser.add_argument('--save_to', type=str, default=None)
+    parser.add_argument('--load_from', type=str, default=None)
     args = parser.parse_args()
+
+    if args.mode == 'test':
+        if args.save_to:
+            os.makedirs(os.path.dirname(args.save_to), exist_ok=True)
+        if args.load_from:
+            assert os.path.exists(args.load_from)
 
     assert args.resume is not None or args.configs is not None, 'At least one of resume or configs should be provided.'
     return args

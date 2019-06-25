@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import torch
 from scipy.spatial.distance import cosine as cosine_dist
@@ -17,11 +19,10 @@ def calculate_accuracy(threshold, dist, actual_issame):
     return tpr, fpr, acc
 
 
-class Evaluator():
+class Storage():
     source_emb = []
     target_emb = []
     is_same = []
-    prepared = False
 
     def extend(self, source_emb, target_emb, is_same):
         """
@@ -39,10 +40,24 @@ class Evaluator():
             else:
                 raise NotImplementedError()
             container.append(element)
-        self.prepared = False
 
     def clear(self):
         self.source_emb, self.target_emb, self.is_same = [], [], []
+
+
+class Evaluator():
+    prepared = False
+    storage = Storage()
+
+    def extend(self, source_emb, target_emb, is_same):
+        """
+        Collect prediction.
+        """
+        self.storage.extend(source_emb, target_emb, is_same)
+        self.prepared = False
+
+    def clear(self):
+        self.storage.clear()
         self.prepared = False
 
     def prepare(self):
@@ -51,9 +66,9 @@ class Evaluator():
         """
         if self.prepared:
             return
-        self.source_embeddings = np.concatenate(self.source_emb, axis=0)
-        self.target_embedggins = np.concatenate(self.target_emb, axis=0)
-        self.is_sames = np.concatenate(self.is_same, axis=0)
+        self.source_embeddings = np.concatenate(self.storage.source_emb, axis=0)
+        self.target_embedggins = np.concatenate(self.storage.target_emb, axis=0)
+        self.is_sames = np.concatenate(self.storage.is_same, axis=0)
         self.prepared = True
 
     def _calculate_dist(self, strategy='l2_dist'):
@@ -95,6 +110,16 @@ class Evaluator():
         for i, threshold in enumerate(thresholds):
             tprs[i], fprs[i], accs[i] = calculate_accuracy(threshold, dists, self.is_sames)
 
-        best_threshold_index = np.argmax(accs)
-        best_threshold = thresholds[best_threshold_index]
-        return tprs, fprs, accs, best_threshold
+        return tprs, fprs, accs, thresholds
+
+    def save_to(self, fname):
+        self.prepare()
+        targets = ['source_embeddings', 'target_embedggins', 'is_sames']
+        np.savez(fname, **{t: getattr(self, t) for t in targets})
+
+    def load_from(self, fname):
+        targets = ['source_embeddings', 'target_embedggins', 'is_sames']
+        loaded = np.load(fname)
+        for t in targets:
+            setattr(self, t, loaded[t])
+        self.prepared = True

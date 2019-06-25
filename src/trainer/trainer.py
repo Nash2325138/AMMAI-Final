@@ -4,7 +4,7 @@ import torch
 from torchvision.utils import make_grid
 
 from base.base_trainer import BaseTrainer
-from utils.util import get_lr
+from utils.util import get_lr, gen_roc_plot, gen_acc_thres_plot
 from evaluator import Evaluator
 
 
@@ -160,23 +160,36 @@ class Trainer(BaseTrainer):
         self.writer.add_text(', '.join(['same' if is_same else 'diff'
                                         for is_same in data_input['is_same'][: n]]))
 
-    def verify(self, data_loader):
-        self.model.eval()
-        self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
-        self.evaluator.clear()
+    def verify(self, data_loader, load_from=None, save_to=None):
 
-        with torch.no_grad():
-            for batch_idx, data_input in enumerate(data_loader):
-                self.writer.set_step(batch_idx, 'inference')
-                for key in data_input.keys():
-                    value = data_input[key]
-                    data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
+        def collect():
+            self.evaluator.clear()
+            self.model.eval()
+            self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
+            with torch.no_grad():
+                for batch_idx, data_input in enumerate(data_loader):
+                    for key in data_input.keys():
+                        value = data_input[key]
+                        data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                source_embedding = self.model.embedding(data_input['f1'])
-                target_embedding = self.model.embedding(data_input['f2'])
-                self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
-                if batch_idx % 10 == 0:
-                    self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
-        self.logger.info('ROC data:')
-        self.logger.info(self.evaluator.calculate_roc(n_thres=50, strategy='cosine'))
-        self.logger.info(self.evaluator.calculate_roc(n_thres=50, strategy='l2_dist'))
+                    source_embedding = self.model.embedding(data_input['f1'])
+                    target_embedding = self.model.embedding(data_input['f2'])
+                    self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
+                    if batch_idx % 10 == 0:
+                        self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
+
+        def draw_curves():
+            self.logger.info('Drawing curves...')
+            roc_curve_tensor = gen_roc_plot(fprs, tprs, return_tensor=True)
+            acc_curve_tensor = gen_acc_thres_plot(thresholds, accs, return_tensor=True)
+            self.writer.add_image('Curves', make_grid([roc_curve_tensor, acc_curve_tensor], nrow=2))
+
+        self.writer.set_step(0, 'inference')
+        if load_from:
+            self.evaluator.load_from(load_from)
+        else:
+            collect()
+        if save_to:
+            self.evaluator.save_to(save_to)
+        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=50, strategy='cosine')
+        draw_curves()
