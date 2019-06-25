@@ -241,6 +241,8 @@ class FaceModelIRSE(BaseModel):
             logger.info(f'Loading {backbone_weights} into {self.__class__}')
             state = torch.load(backbone_weights)
             self.backbone.load_state_dict(state)
+        self.finetune_mode = ''
+        self.set_finetune_mode('all')
 
     def forward(self, data_input):
         x = data_input['face_tensor']
@@ -256,3 +258,18 @@ class FaceModelIRSE(BaseModel):
 
     def logits(self, embedding, label):
         return self.archead(embedding, label)
+
+    def set_finetune_mode(self, mode='all'):
+        if mode == self.finetune_mode:
+            return
+        if mode == 'all':
+            for param in self.parameters():
+                param.requires_grad = True
+        elif mode == 'head':
+            for param in self.parameters():
+                param.requires_grad = False
+            for param in self.archead.parameters():
+                param.requires_grad = True
+        else:
+            raise NotImplementedError()
+        self.finetune_mode = mode

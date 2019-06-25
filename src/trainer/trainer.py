@@ -29,6 +29,7 @@ class Trainer(BaseTrainer):
         self.log_step = log_step
         self.show_all_loss = show_all_loss
         self.evaluator = Evaluator()
+        self.n_tune_head_epoch = 5  # TODO: let it be configurable
 
     def _eval_metrics(self, data_input, model_output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -36,6 +37,15 @@ class Trainer(BaseTrainer):
             acc_metrics[i] += metric(data_input, model_output)
             self.writer.add_scalar(f'{metric.__name__}', acc_metrics[i])
         return acc_metrics
+
+    def _set_finetune_mode(self, epoch):
+        model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+        if epoch <= self.n_tune_head_epoch:
+            mode = 'head'
+        else:
+            mode = 'all'
+        model.set_finetune_mode(mode)
+        self.logger.info(f'Now finetune mode: {mode}')
 
     def _train_epoch(self, epoch):
         """
@@ -55,13 +65,14 @@ class Trainer(BaseTrainer):
         """
 
         log = {}
-        if self.do_validation:
+        if self.do_validation and epoch > self.n_tune_head_epoch:
             for idx in range(len(self.valid_data_loaders)):
                 valid_log = self.verify(self.valid_data_loaders[idx], epoch=epoch)
                 log = {**log, **valid_log}
 
         np.random.seed()
         self.model.train()
+        self._set_finetune_mode(epoch)
         self.logger.info(f'Current lr: {get_lr(self.optimizer)}')
         epoch_start_time = time.time()
 
@@ -170,8 +181,7 @@ class Trainer(BaseTrainer):
                         value = data_input[key]
                         data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                    if isinstance(self.model, torch.nn.DataParallel):
-                        model = self.model.module
+                    model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
                     source_embedding = model.embedding(data_input['f1'])
                     target_embedding = model.embedding(data_input['f2'])
                     self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
