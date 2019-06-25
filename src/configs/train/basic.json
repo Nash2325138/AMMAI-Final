@@ -20,8 +20,8 @@
         "save_dir": "saved/",
         "save_freq": 1,
         "verbosity": 2,
-        "monitor": "valid_seen_loss",
-        "monitor_mode": "min"
+        "monitor": "valid_auc",
+        "monitor_mode": "max"
     },
     "trainer_args": {
         "show_all_loss": true,

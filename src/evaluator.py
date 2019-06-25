@@ -111,9 +111,10 @@ class Evaluator():
 
         return tprs, fprs, accs, thresholds
 
-    def calculate_auc(self):
-        tpr, fpr, _, _ = self.calculate_roc(strategy='cosine')
-        return metrics.auc(fpr, tpr)
+    def calculate_auc(self, tprs=None, fprs=None):
+        if tprs is None or fprs is None:
+            tprs, fprs, _, _ = self.calculate_roc(strategy='cosine')
+        return metrics.auc(fprs, tprs)
 
     def save_to(self, fname):
         self.prepare()

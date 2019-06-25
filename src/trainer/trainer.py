@@ -53,6 +53,13 @@ class Trainer(BaseTrainer):
 
             The metrics in log must have the key 'metrics'.
         """
+
+        log = {}
+        if self.do_validation:
+            for idx in range(len(self.valid_data_loaders)):
+                valid_log = self.verify(self.valid_data_loaders[idx], epoch=epoch)
+                log = {**log, **valid_log}
+
         np.random.seed()
         self.model.train()
         self.logger.info(f'Current lr: {get_lr(self.optimizer)}')
@@ -89,16 +96,12 @@ class Trainer(BaseTrainer):
                 )
                 self._write_tfboard(data_input, model_output)
 
-        log = {
+        train_log = {
             'epoch_time': time.time() - epoch_start_time,
             'loss': total_loss / len(self.data_loader),
             f'{self.data_loader.name}_metrics': (total_metrics / len(self.data_loader)).tolist()
         }
-
-        if self.do_validation:
-            for idx in range(len(self.valid_data_loaders)):
-                val_log = self._valid_epoch(epoch, idx)
-                log = {**log, **val_log}
+        log = {**log, **train_log}
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
@@ -154,12 +157,11 @@ class Trainer(BaseTrainer):
 
     def _write_tfboard(self, data_input, model_output, n=4):
         face_tensor = data_input['face_tensor'][: n]
-        self.writer.add_image('face_tensor', make_grid(face_tensor, nrow=4, normalize=False))
+        self.writer.add_image('face_tensor', make_grid(face_tensor, nrow=4, normalize=True))
 
     def verify(self, data_loader, load_from=None, save_to=None, epoch=0):
 
         def collect():
-            self.evaluator.clear()
             self.model.eval()
             self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
             with torch.no_grad():
@@ -168,10 +170,12 @@ class Trainer(BaseTrainer):
                         value = data_input[key]
                         data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                    source_embedding = self.model.embedding(data_input['f1'])
-                    target_embedding = self.model.embedding(data_input['f2'])
+                    if isinstance(self.model, torch.nn.DataParallel):
+                        model = self.model.module
+                    source_embedding = model.embedding(data_input['f1'])
+                    target_embedding = model.embedding(data_input['f2'])
                     self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
-                    if batch_idx % 10 == 0:
+                    if batch_idx % 50 == 0:
                         self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
 
         def draw_curves():
@@ -186,8 +190,12 @@ class Trainer(BaseTrainer):
         if load_from:
             self.evaluator.load_from(load_from)
         else:
+            self.evaluator.clear()
             collect()
         if save_to:
             self.evaluator.save_to(save_to)
-        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=50, strategy='cosine')
+
+        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=100, strategy='cosine')
+        auc = self.evaluator.calculate_auc(tprs=tprs, fprs=fprs)
         draw_curves()
+        return {"valid_acc": accs.max(), "valid_auc": auc}
