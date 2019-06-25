@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from scipy.spatial.distance import cosine as cosine_dist
+from sklearn import metrics
 
 
 # copied from https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/verifacation.py
@@ -109,6 +110,10 @@ class Evaluator():
             tprs[i], fprs[i], accs[i] = calculate_accuracy(threshold, dists, self.is_sames)
 
         return tprs, fprs, accs, thresholds
+
+    def calculate_auc(self):
+        tpr, fpr, _, _ = self.calculate_roc(strategy='cosine')
+        return metrics.auc(fpr, tpr)
 
     def save_to(self, fname):
         self.prepare()
