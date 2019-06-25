@@ -153,15 +153,10 @@ class Trainer(BaseTrainer):
         }
 
     def _write_tfboard(self, data_input, model_output, n=4):
-        f1 = data_input['f1'][: n]
-        f2 = data_input['f2'][: n]
+        face_tensor = data_input['face_tensor'][: n]
+        self.writer.add_image('face_tensor', make_grid(face_tensor, nrow=4, normalize=False))
 
-        self.writer.add_image('f1', make_grid(f1, nrow=4, normalize=False))
-        self.writer.add_image('f2', make_grid(f2, nrow=4, normalize=False))
-        self.writer.add_text(', '.join(['same' if is_same else 'diff'
-                                        for is_same in data_input['is_same'][: n]]))
-
-    def verify(self, data_loader, load_from=None, save_to=None):
+    def verify(self, data_loader, load_from=None, save_to=None, epoch=0):
 
         def collect():
             self.evaluator.clear()
@@ -187,7 +182,7 @@ class Trainer(BaseTrainer):
                                                   save_to=os.path.join(self.checkpoint_dir, 'acc_curve.png'))
             self.writer.add_image('Curves', make_grid([roc_curve_tensor, acc_curve_tensor], nrow=2))
 
-        self.writer.set_step(0, 'inference')
+        self.writer.set_step(epoch, 'inference')
         if load_from:
             self.evaluator.load_from(load_from)
         else:

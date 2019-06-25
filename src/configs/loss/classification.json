@@ -6,7 +6,7 @@
             "weight": 1,
             "args": {
                 "output_key": "logits",
-                "target_key": "label"
+                "target_key": "faceID"
             }
         }
     ],
@@ -17,7 +17,7 @@
                 "nickname": "Top1Acc",
                 "k":1,
                 "output_key": "logits",
-                "target_key": "class"
+                "target_key": "faceID"
             }
         },
         {
@@ -26,7 +26,7 @@
                 "nickname": "Top5Acc",
                 "k":5,
                 "output_key": "logits",
-                "target_key": "label"
+                "target_key": "faceID"
             }
         }
     ]

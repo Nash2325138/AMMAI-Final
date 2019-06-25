@@ -33,7 +33,7 @@ def main(config, args):
         valid_data_loaders = [data_loader.split_validation()]
 
     # build model architecture
-    model = get_instance(module_arch, 'arch', config)
+    model = get_instance(module_arch, 'arch', config, classnum=data_loader.num_classes)
     model.summary()
 
     # setup instances of losses

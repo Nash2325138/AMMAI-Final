@@ -10,6 +10,7 @@ from torch.nn import (Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU,
                       Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d,
                       Sequential, Module, Parameter)
 from collections import namedtuple
+from utils.logging_config import logger
 
 
 # Original Arcface Model, codes modified from https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/model.py
@@ -237,12 +238,13 @@ class FaceModelIRSE(BaseModel):
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
         self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
         if backbone_weights is not None:
+            logger.info(f'Loading {backbone_weights} into {self.__class__}')
             state = torch.load(backbone_weights)
             self.backbone.load_state_dict(state)
 
     def forward(self, data_input):
         x = data_input['face_tensor']
-        label = data_input['label']
+        label = data_input['faceID']
         embedding = self.embedding(x)
         logits = self.logits(embedding, label)
         return {

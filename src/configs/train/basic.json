@@ -1,5 +1,5 @@
 {
-    "n_gpu": 1,
+    "n_gpu": 2,
     "optimizer": {
         "type": "Adam",
         "args": {
@@ -25,7 +25,7 @@
     },
     "trainer_args": {
         "show_all_loss": true,
-        "log_step": 500,
+        "log_step": 100,
         "finetune_fc_epoch": 3
     },
     "visualization":{
