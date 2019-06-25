@@ -31,12 +31,13 @@ class AsiaLegisDataLoader(BaseDataLoader):
 class AsiaLegisDataSet(Dataset):
     def __init__(
         self, data_root,
+        normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]
     ):
         self.data_root = data_root
         self.test_transform = transforms.Compose([
             transforms.Resize([112, 112]),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize(*normalization)
         ])  # Following https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/config.py
         self.data_table = self.read_pairs()
 
