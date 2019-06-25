@@ -180,10 +180,12 @@ class Trainer(BaseTrainer):
 
         def draw_curves():
             self.logger.info('Drawing curves...')
-            roc_curve_tensor = gen_roc_plot(fprs, tprs, return_tensor=True,
-                                            save_to=os.path.join(self.checkpoint_dir, 'ROC_curve.png'))
-            acc_curve_tensor = gen_acc_thres_plot(thresholds, accs, return_tensor=True,
-                                                  save_to=os.path.join(self.checkpoint_dir, 'acc_curve.png'))
+            roc_curve_tensor = gen_roc_plot(
+                fprs, tprs, return_tensor=True,
+                save_to=os.path.join(self.checkpoint_dir, f'ROC_curve_epoch{epoch}.png'))
+            acc_curve_tensor = gen_acc_thres_plot(
+                thresholds, accs, return_tensor=True,
+                save_to=os.path.join(self.checkpoint_dir, f'acc_curve_epoch{epoch}.png'))
             self.writer.add_image('Curves', make_grid([roc_curve_tensor, acc_curve_tensor], nrow=2))
 
         self.writer.set_step(epoch, 'inference')
