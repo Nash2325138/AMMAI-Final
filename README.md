@@ -13,12 +13,12 @@ source activate AMMAI_final
 
 ## Training command example
 ```
-CUDA_VISIBLE_DEVICES=1 python train.py --configs configs/train/basic.json configs/loss/verb1_noun0.json configs/arch/inception_i3d.json configs/data/kitchen.json
+# not yet 
 ```
 
 ## Inference test set example
 ```
-CUDA_VISIBLE_DEVICES=1 python train.py --resume saved/InceptionV1_I3D/0408_181050/checkpoint-epoch29_1.7006-best.pth --configs configs/data/kitchen_test.json --mode test --save_dir ../outputs/I3D_rgb_verb/
+CUDA_VISIBLE_DEVICES=2 python train.py --config configs/arch/Arcface_IR_SE50.json configs/data/asia_legislator_verification.json configs/loss/classification.json configs/train/basic.json --mode test --save_to ../outputs/baseline_evaluator_another_normalize.npz
 ```
 
 ## Referenced papers
