@@ -1,8 +1,13 @@
 import os
+import io
 from glob import glob
 
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
+from torchvision import transforms as trans
+from PIL import Image
+from .logging import logger
 
 
 def ensure_dir(path):
@@ -52,166 +57,10 @@ def replace_module_prefix(state_dict, prefix='module.', replace=''):
     return new_state
 
 
-def flow_to_image(flows):
-    # https://github.com/vt-vl-lab/pytorch_flownet2/blob/master/FlowNet2_src/flowlib.py
-    UNKNOWN_FLOW_THRESH = 1e7
-    """
-    Convert flow into middlebury color code image
-    :param flow: optical flow map
-    :return: optical flow image in middlebury color
-    """
-    def make_color_wheel():
-        """
-        Generate color wheel according Middlebury color code
-        :return: Color wheel
-        """
-        RY = 15
-        YG = 6
-        GC = 4
-        CB = 11
-        BM = 13
-        MR = 6
-
-        ncols = RY + YG + GC + CB + BM + MR
-
-        colorwheel = np.zeros([ncols, 3])
-
-        col = 0
-
-        # RY
-        colorwheel[0:RY, 0] = 255
-        colorwheel[0:RY, 1] = np.transpose(np.floor(255 * np.arange(0, RY) / RY))
-        col += RY
-
-        # YG
-        colorwheel[col:col + YG, 0] = 255 - np.transpose(np.floor(255 * np.arange(0, YG) / YG))
-        colorwheel[col:col + YG, 1] = 255
-        col += YG
-
-        # GC
-        colorwheel[col:col + GC, 1] = 255
-        colorwheel[col:col + GC, 2] = np.transpose(np.floor(255 * np.arange(0, GC) / GC))
-        col += GC
-
-        # CB
-        colorwheel[col:col + CB, 1] = 255 - np.transpose(np.floor(255 * np.arange(0, CB) / CB))
-        colorwheel[col:col + CB, 2] = 255
-        col += CB
-
-        # BM
-        colorwheel[col:col + BM, 2] = 255
-        colorwheel[col:col + BM, 0] = np.transpose(np.floor(255 * np.arange(0, BM) / BM))
-        col += + BM
-
-        # MR
-        colorwheel[col:col + MR, 2] = 255 - np.transpose(np.floor(255 * np.arange(0, MR) / MR))
-        colorwheel[col:col + MR, 0] = 255
-
-        return colorwheel
-
-    def compute_color(u, v):
-        """
-        compute optical flow color map
-        :param u: optical flow horizontal map
-        :param v: optical flow vertical map
-        :return: optical flow in color code
-        """
-        [h, w] = u.shape
-        img = np.zeros([h, w, 3])
-        nanIdx = np.isnan(u) | np.isnan(v)
-        u[nanIdx] = 0
-        v[nanIdx] = 0
-
-        colorwheel = make_color_wheel()
-        ncols = np.size(colorwheel, 0)
-
-        rad = np.sqrt(u ** 2 + v ** 2)
-
-        a = np.arctan2(-v, -u) / np.pi
-
-        fk = (a + 1) / 2 * (ncols - 1) + 1
-
-        k0 = np.floor(fk).astype(int)
-
-        k1 = k0 + 1
-        k1[k1 == ncols + 1] = 1
-        f = fk - k0
-
-        for i in range(0, np.size(colorwheel, 1)):
-            tmp = colorwheel[:, i]
-            col0 = tmp[k0 - 1] / 255
-            col1 = tmp[k1 - 1] / 255
-            col = (1 - f) * col0 + f * col1
-
-            idx = rad <= 1
-            col[idx] = 1 - rad[idx] * (1 - col[idx])
-            notidx = np.logical_not(idx)
-
-            col[notidx] *= 0.75
-            img[:, :, i] = np.uint8(np.floor(255 * col * (1 - nanIdx)))
-
-        return img
-    new_flow_imgs = np.zeros([flows.shape[0], 3, flows.shape[2], flows.shape[3]])
-
-    for iidx in range(flows.shape[0]):
-        # u = flows[iidx * 2].cpu().numpy()
-        # u = u.transpose([1, 2, 0])
-        # u = np.dot(u[..., :3], [0.299, 0.587, 0.114])
-        # v = flows[iidx * 2 + 1].cpu().numpy()
-        # v = v.transpose([1, 2, 0])
-        # v = np.dot(v[..., :3], [0.299, 0.587, 0.114])
-        u = flows[iidx][0].cpu().numpy()
-        v = flows[iidx][1].cpu().numpy()
-
-        maxu = -999.
-        maxv = -999.
-        minu = 999.
-        minv = 999.
-
-        idxUnknow = (abs(u) > UNKNOWN_FLOW_THRESH) | (abs(v) > UNKNOWN_FLOW_THRESH)
-        u[idxUnknow] = 0
-        v[idxUnknow] = 0
-
-        maxu = max(maxu, np.max(u))
-        minu = min(minu, np.min(u))
-
-        maxv = max(maxv, np.max(v))
-        minv = min(minv, np.min(v))
-
-        rad = np.sqrt(u ** 2 + v ** 2)
-        maxrad = max(-1, np.max(rad))
-
-        u = u / (maxrad + np.finfo(float).eps)
-        v = v / (maxrad + np.finfo(float).eps)
-
-        img = compute_color(u, v)
-
-        idx = np.repeat(idxUnknow[:, :, np.newaxis], 3, axis=2)
-        img[idx] = 0
-        img = img.transpose((2, 0, 1))
-
-        new_flow_imgs[iidx] = np.uint8(img)
-
-    return torch.from_numpy(new_flow_imgs)
-
-
 def extract_missing_and_unexpected_keys(source_keys, target_keys):
     unexpected = [key for key in source_keys if key not in target_keys]
     missing = [key for key in target_keys if key not in source_keys]
     return missing, unexpected
-
-
-# Channel when transformed
-channel_nb = {'flow': 1, 'rgb': 3, 'bbox': 1, 'handpose': 3}
-# Final channels
-in_channel_map = {'rgb': 3, 'flow': 2, 'bbox': 1, 'handpose': 3}
-
-
-def count_in_channels(modalities):
-    in_channels = 0
-    for modality in modalities:
-        in_channels += in_channel_map[modality]
-    return in_channels
 
 
 def softmax(data):
@@ -220,3 +69,45 @@ def softmax(data):
     assert np.isclose(data[0].sum(), 1)
     assert np.isclose(data[-1].sum(), 1)
     return data
+
+
+def gen_roc_plot(fpr, tpr, return_tensor=False, save_to=None):
+    """Create a pyplot plot and save to buffer."""
+    plt.figure()
+    plt.xlabel("FPR", fontsize=14)
+    plt.ylabel("TPR", fontsize=14)
+    plt.title("ROC Curve", fontsize=14)
+    plt.plot(fpr, tpr, linewidth=2)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    if save_to:
+        logger.info(f'Saving ROC curve to {save_to}')
+        plt.savefig(save_to)
+    buf.seek(0)
+    plt.close()
+    if return_tensor:
+        roc_curve = Image.open(buf)
+        roc_curve_tensor = trans.ToTensor()(roc_curve)
+        return roc_curve_tensor
+    else:
+        return buf
+
+
+def gen_acc_thres_plot(thres, accs, return_tensor=False, save_to=None):
+    plt.figure()
+    plt.xlabel("threshold", fontsize=14)
+    plt.ylabel("accuracy", fontsize=14)
+    plt.plot(thres, accs, linewidth=2)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpeg')
+    if save_to:
+        logger.info(f'Saving accuracy curve to {save_to}')
+        plt.savefig(save_to)
+    buf.seek(0)
+    plt.close()
+    if return_tensor:
+        curve = Image.open(buf)
+        curve_tensor = trans.ToTensor()(curve)
+        return curve_tensor
+    else:
+        return buf

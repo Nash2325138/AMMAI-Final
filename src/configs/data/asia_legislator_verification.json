@@ -1,0 +1,31 @@
+{
+    "name": "assia_logistator_verification_dataset",
+    "data_loader": {
+        "type": "AsiaLegisDataLoader",
+        "args":{
+            "name": "test",
+            "batch_size": 120,
+            "shuffle": false,
+            "validation_split": 0.0,
+            "num_workers": 4,
+            "dataset_args": {
+                "data_root": "../datasets/asia_legistator_dataset/"
+            }
+        }
+    },
+    "valid_data_loaders": [
+        {
+            "type": "AsiaLegisDataLoader",
+            "args":{
+                "name": "test",
+                "batch_size": 120,
+                "shuffle": false,
+                "validation_split": 0.0,
+                "num_workers": 4,
+                "dataset_args": {
+                    "data_root": "../datasets/asia_legistator_dataset/"
+                }
+            }
+        }
+    ]
+}

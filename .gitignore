@@ -1,5 +1,5 @@
-data/
-pretrained_model/
+datasets/
+pretrained_weights/
 
 outputs/
 submissions/

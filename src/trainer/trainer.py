@@ -1,10 +1,12 @@
+import os
 import time
 import numpy as np
 import torch
 from torchvision.utils import make_grid
 
 from base.base_trainer import BaseTrainer
-from utils.util import get_lr, flow_to_image, in_channel_map
+from utils.util import get_lr, gen_roc_plot, gen_acc_thres_plot
+from evaluator import Evaluator
 
 
 class Trainer(BaseTrainer):
@@ -26,8 +28,7 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = log_step
         self.show_all_loss = show_all_loss
-        self.finetune_fc_epoch = finetune_fc_epoch
-        self.finetune_first_conv_epoch = finetune_first_conv_epoch
+        self.evaluator = Evaluator()
 
     def _eval_metrics(self, data_input, model_output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -35,25 +36,6 @@ class Trainer(BaseTrainer):
             acc_metrics[i] += metric(data_input, model_output)
             self.writer.add_scalar(f'{metric.__name__}', acc_metrics[i])
         return acc_metrics
-
-    def _set_finetune(self, epoch):
-        if self.finetune_fc_epoch is not None:
-            # Tune only the last fc layer for some epochs
-            if epoch <= self.finetune_fc_epoch:
-                self.logger.info('Currently tuning only the last layer.')
-                self.model.set_finetune_mode('fc')
-            else:
-                self.logger.info('Currently tuning the whole model.')
-                self.model.set_finetune_mode('all')
-
-        if self.finetune_first_conv_epoch is not None:
-            # Tune only the last fc layer for some epochs
-            if epoch <= self.finetune_first_conv_epoch:
-                self.logger.info('Currently tuning only the first convolution.')
-                self.model.set_finetune_mode('first_conv')
-            else:
-                self.logger.info('Currently tuning the whole model.')
-                self.model.set_finetune_mode('all')
 
     def _train_epoch(self, epoch):
         """
@@ -75,7 +57,6 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.logger.info(f'Current lr: {get_lr(self.optimizer)}')
         epoch_start_time = time.time()
-        self._set_finetune(epoch)
 
         total_loss = 0
         total_metrics = np.zeros(len(self.metrics))
@@ -106,7 +87,7 @@ class Trainer(BaseTrainer):
                     f'loss_total: {loss.item():.6f}, '
                     f'BT: {time.time() - batch_start_time:.2f}s'
                 )
-                self._write_images(data_input, model_output)
+                self._write_tfboard(data_input, model_output)
 
         log = {
             'epoch_time': time.time() - epoch_start_time,
@@ -164,47 +145,54 @@ class Trainer(BaseTrainer):
                 total_val_loss += loss.item()
                 total_val_metrics += self._eval_metrics(data_input, model_output)
                 if self.verbosity >= 2 and batch_idx % self.log_step == 0:
-                    self._write_images(data_input, model_output)
+                    self._write_tfboard(data_input, model_output)
 
         return {
             f'{loader.name}_loss': total_val_loss / len(loader),
             f'{loader.name}_metrics': (total_val_metrics / len(loader)).tolist()
         }
 
-    def _write_images(self, data_input, model_output):
-        for modality in in_channel_map.keys():
-            if f"{modality}_video" in data_input.keys():
-                frames = data_input[f'{modality}_video'][0].transpose(0, 1)
-                if modality == 'flow':
-                    frames = flow_to_image(frames)
-                self.writer.add_image(f'input_{modality}', make_grid(frames, nrow=4, normalize=True))
+    def _write_tfboard(self, data_input, model_output, n=4):
+        f1 = data_input['f1'][: n]
+        f2 = data_input['f2'][: n]
 
-    def inference(self, data_loader, saved_keys=['verb_logits', 'noun_logits', 'uid']):
-        self.model.eval()
-        self.logger.info(f'Inferencing with following keys to save: {saved_keys}')
-        self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
-        saved_results = {k: [] for k in saved_keys}
+        self.writer.add_image('f1', make_grid(f1, nrow=4, normalize=False))
+        self.writer.add_image('f2', make_grid(f2, nrow=4, normalize=False))
+        self.writer.add_text(', '.join(['same' if is_same else 'diff'
+                                        for is_same in data_input['is_same'][: n]]))
 
-        with torch.no_grad():
-            for batch_idx, data_input in enumerate(data_loader):
-                self.writer.set_step(batch_idx, 'inference')
-                for key in data_input.keys():
-                    value = data_input[key]
-                    if key in saved_keys:
-                        saved_value = value.numpy() if torch.is_tensor(value) else value
-                        saved_results[key].extend([v for v in saved_value])
-                    data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
+    def verify(self, data_loader, load_from=None, save_to=None):
 
-                model_output = self.model(data_input)
-                for key in model_output.keys():
-                    if key in saved_keys:
-                        saved_results[key].extend([v for v in model_output[key].cpu().numpy()])
+        def collect():
+            self.evaluator.clear()
+            self.model.eval()
+            self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
+            with torch.no_grad():
+                for batch_idx, data_input in enumerate(data_loader):
+                    for key in data_input.keys():
+                        value = data_input[key]
+                        data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                if batch_idx == 0:
-                    non_exists_keys = [key for key in saved_keys if len(saved_results[key]) == 0]
-                    if len(non_exists_keys) > 0:
-                        self.logger.warning(f'Keys {non_exists_keys} not exists')
-                if batch_idx % 10 == 0:
-                    self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
+                    source_embedding = self.model.embedding(data_input['f1'])
+                    target_embedding = self.model.embedding(data_input['f2'])
+                    self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
+                    if batch_idx % 10 == 0:
+                        self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
 
-        return saved_results
+        def draw_curves():
+            self.logger.info('Drawing curves...')
+            roc_curve_tensor = gen_roc_plot(fprs, tprs, return_tensor=True,
+                                            save_to=os.path.join(self.checkpoint_dir, 'ROC_curve.png'))
+            acc_curve_tensor = gen_acc_thres_plot(thresholds, accs, return_tensor=True,
+                                                  save_to=os.path.join(self.checkpoint_dir, 'acc_curve.png'))
+            self.writer.add_image('Curves', make_grid([roc_curve_tensor, acc_curve_tensor], nrow=2))
+
+        self.writer.set_step(0, 'inference')
+        if load_from:
+            self.evaluator.load_from(load_from)
+        else:
+            collect()
+        if save_to:
+            self.evaluator.save_to(save_to)
+        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=50, strategy='cosine')
+        draw_curves()

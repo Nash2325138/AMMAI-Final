@@ -1,7 +1,6 @@
 import os
 import json
 import argparse
-import pickle
 from copy import copy
 
 import torch
@@ -34,11 +33,7 @@ def main(config, args):
         valid_data_loaders = [data_loader.split_validation()]
 
     # build model architecture
-    model = get_instance(
-        module_arch, 'arch', config,
-        num_verb_classes=data_loader.num_verb_classes,
-        num_noun_classes=data_loader.num_noun_classes
-    )
+    model = get_instance(module_arch, 'arch', config)
     model.summary()
 
     # setup instances of losses
@@ -74,18 +69,8 @@ def main(config, args):
         trainer.load_pretrained(args.pretrained)
 
     if args.mode == 'test':
-        # this line is to solve the error described in https://github.com/pytorch/pytorch/issues/973
-        torch.multiprocessing.set_sharing_strategy('file_system')
-        saved_keys = ['verb_logits', 'noun_logits', 'uid', 'verb_class', 'noun_class']
         for loader in trainer.valid_data_loaders:
-            file_path = os.path.join(args.save_dir, loader.name + '.pkl')
-            if os.path.exists(file_path) and args.skip_exists:
-                logger.warning(f'Skipping inference and saving {file_path}')
-                continue
-            inference_results = trainer.inference(loader, saved_keys)
-            with open(file_path, 'wb') as f:
-                logger.info(f'Saving results on loader {loader.name} into {file_path}')
-                pickle.dump(inference_results, f)
+            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to)
     else:
         trainer.train()
 
@@ -115,18 +100,17 @@ def parse_args():
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
     parser.add_argument('--mode', type=str, choices=['train', 'test'], default='train')
-    parser.add_argument('--save_dir', default=None, type=str, help='Path to save the inference results.')
-    parser.add_argument('--skip_exists', action='store_true', help='Skip inference when saving files already exist.')
+    parser.add_argument('--save_to', type=str, default=None)
+    parser.add_argument('--load_from', type=str, default=None)
     args = parser.parse_args()
 
-    assert args.resume is not None or args.configs is not None, 'At least one of resume or configs should be provided.'
     if args.mode == 'test':
-        # assertions to make sure user do provide a valid path
-        assert args.save_dir is not None
-        if os.path.exists(args.save_dir):
-            logger.warning(f'The directory {args.save_dir} already exists.')
-        else:
-            os.makedirs(args.save_dir)
+        if args.save_to:
+            os.makedirs(os.path.dirname(args.save_to), exist_ok=True)
+        if args.load_from:
+            assert os.path.exists(args.load_from)
+
+    assert args.resume is not None or args.configs is not None, 'At least one of resume or configs should be provided.'
     return args
 
 
@@ -144,6 +128,6 @@ if __name__ == '__main__':
     if args.device:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
-    global_variables.global_config = config.get('global_config', {})
+    global_variables.config = config
     logger.info(f'Experiment name: {config["name"]}')
     main(config, args)

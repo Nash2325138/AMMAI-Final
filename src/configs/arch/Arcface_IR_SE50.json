@@ -1,0 +1,10 @@
+{
+    "name": "Arcface_IR_SE50",
+    "arch": {
+        "type": "FaceModelIRSE",
+        "args": {
+            "num_layers": 50,
+            "backbone_weights": "../pretrained_weights/model_ir_se50.pth"
+        }
+    }
+}

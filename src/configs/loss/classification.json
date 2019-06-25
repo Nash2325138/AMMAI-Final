@@ -1,0 +1,33 @@
+{
+    "losses": [
+        {
+            "nickname": "CrossEntropy",
+            "type": "CrossEntropyLoss",
+            "weight": 1,
+            "args": {
+                "output_key": "logits",
+                "target_key": "label"
+            }
+        }
+    ],
+    "metrics": [
+        {
+            "type": "TopKAcc",
+            "args": {
+                "nickname": "Top1Acc",
+                "k":1,
+                "output_key": "logits",
+                "target_key": "class"
+            }
+        },
+        {
+            "type": "TopKAcc",
+            "args": {
+                "nickname": "Top5Acc",
+                "k":5,
+                "output_key": "logits",
+                "target_key": "label"
+            }
+        }
+    ]
+}
