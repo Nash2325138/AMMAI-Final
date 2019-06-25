@@ -1,5 +1,3 @@
-import pickle
-
 import numpy as np
 import torch
 from scipy.spatial.distance import cosine as cosine_dist
