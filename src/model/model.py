@@ -250,6 +250,7 @@ class FaceModelIRSE(BaseModel):
         embedding = self.embedding(x)
         logits = self.logits(embedding, label)
         return {
+            'embedding': embedding,
             'logits': logits
         }
 
