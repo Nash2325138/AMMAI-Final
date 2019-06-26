@@ -70,7 +70,7 @@ def main(config, args):
 
     if args.mode == 'test':
         for loader in trainer.valid_data_loaders:
-            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to)
+            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to, verbosity=1)
     elif args.mode == 'rolling_test':
         from glob import glob
         from itertools import count
@@ -81,7 +81,7 @@ def main(config, args):
                 break
             trainer._resume_checkpoint(candidates[0])
             trainer.verify(
-                trainer.valid_data_loaders[0],
+                trainer.valid_data_loaders[0], epoch=i, verbosity=1,
                 save_to=os.path.join(trainer.checkpoint_dir, f'evaluator_save_epoch{i}.npz'))
     elif args.mode == 'train':
         trainer.train()

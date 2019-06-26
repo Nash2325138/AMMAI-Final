@@ -170,7 +170,7 @@ class Trainer(BaseTrainer):
         face_tensor = data_input['face_tensor'][: n]
         self.writer.add_image('face_tensor', make_grid(face_tensor, nrow=4, normalize=True))
 
-    def verify(self, data_loader, load_from=None, save_to=None, epoch=0):
+    def verify(self, data_loader, load_from=None, save_to=None, epoch=0, verbosity=0):
 
         def collect():
             self.model.eval()
@@ -211,4 +211,6 @@ class Trainer(BaseTrainer):
         auc = self.evaluator.calculate_auc(tprs=tprs, fprs=fprs)
         draw_curves()
         valid_log = {"valid_acc": accs.max(), "valid_auc": auc}
+        if verbosity > 0:
+            self.logger.info(valid_log)
         return valid_log
