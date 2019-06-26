@@ -1,0 +1,33 @@
+{
+    "name": "asia_celeb_finetune",
+    "data_loader": {
+        "type": "AsiaCelebDataLoader",
+        "args":{
+            "name": "train",
+            "batch_size": 64,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 8,
+            "dataset_args": {
+                "data_root": "../datasets/faces_glintasia_images/",
+                "uniform_on_person": true,
+                "min_n_faces": 10
+            }
+        }
+    },
+    "valid_data_loaders": [
+        {
+            "type": "AsiaLegisDataLoader",
+            "args":{
+                "name": "test",
+                "batch_size": 120,
+                "shuffle": false,
+                "validation_split": 0.0,
+                "num_workers": 8,
+                "dataset_args": {
+                    "data_root": "../datasets/asia_legistator_dataset/"
+                }
+            }
+        }
+    ]
+}
