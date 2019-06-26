@@ -117,27 +117,27 @@ class Evaluator():
         return metrics.auc(fpr, tpr)
 
     def calculate_kfold_acc(self, strategy='cosine', n_thres=400, k=10):
-	    assert strategy in ['l2_dist', 'cosine']
-	    self.prepare()
-	    thresholds = self._calculate_thresholds(strategy, n_thres)
-	    dists = self._calculate_dist(strategy)
+        assert strategy in ['l2_dist', 'cosine']
+        self.prepare()
+        thresholds = self._calculate_thresholds(strategy, n_thres)
+        dists = self._calculate_dist(strategy)
 
-	    kf = KFold(n_splits=k, shuffle=True)
-	    fold_acc = 0.0
-	    for idx_val, idx_test in kf.split(dists):
-	        val_dists, val_sames  = dists[idx_val], self.is_sames[idx_val]
-	        test_dists, test_sames = dists[idx_test], self.is_sames[idx_test]
-	        
-	        tprs = np.zeros(n_thres)
-	        fprs = np.zeros(n_thres)
-	        accs = np.zeros(n_thres)
+        kf = KFold(n_splits=k, shuffle=True)
+        fold_acc = 0.0
+        for idx_val, idx_test in kf.split(dists):
+            val_dists, val_sames = dists[idx_val], self.is_sames[idx_val]
+            test_dists, test_sames = dists[idx_test], self.is_sames[idx_test]
 
-	        for i, threshold in enumerate(thresholds):
-	            tprs[i], fprs[i], accs[i] = calculate_accuracy(threshold, val_dists, val_sames)
-	        
-	        fold_acc += calculate_accuracy( thresholds[ np.argmax( accs ) ], test_dists, test_sames )[2]
-	    
-	    return fold_acc / k
+            tprs = np.zeros(n_thres)
+            fprs = np.zeros(n_thres)
+            accs = np.zeros(n_thres)
+
+            for i, threshold in enumerate(thresholds):
+                tprs[i], fprs[i], accs[i] = calculate_accuracy(threshold, val_dists, val_sames)
+
+            fold_acc += calculate_accuracy(thresholds[np.argmax(accs)], test_dists, test_sames)[2]
+
+        return fold_acc / k
 
     def save_to(self, fname):
         self.prepare()
