@@ -210,4 +210,5 @@ class Trainer(BaseTrainer):
         tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=100, strategy='cosine')
         auc = self.evaluator.calculate_auc(tprs=tprs, fprs=fprs)
         draw_curves()
-        return {"valid_acc": accs.max(), "valid_auc": auc}
+        valid_log = {"valid_acc": accs.max(), "valid_auc": auc}
+        return valid_log

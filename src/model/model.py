@@ -236,7 +236,7 @@ class FaceModelIRSE(BaseModel):
                  backbone_weights=None, head_type='ArcFace'):
         super().__init__()
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
-        if head_type == 'Arcface':
+        if head_type == 'ArcFace':
             self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
         elif head_type == 'CosFace':
             self.archead = Am_softmax(embedding_size=embedding_size, classnum=classnum)

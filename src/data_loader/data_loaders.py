@@ -33,7 +33,7 @@ class AsiaLegisDataLoader(BaseDataLoader):
 class AsiaLegisDataSet(Dataset):
     def __init__(
         self, data_root,
-        normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]
+        normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]], aligned_by_retinanet=False
     ):
         self.data_root = data_root
         self.test_transform = transforms.Compose([
@@ -42,6 +42,7 @@ class AsiaLegisDataSet(Dataset):
             transforms.Normalize(*normalization)
         ])  # Following https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/config.py
         self.data_table = self.read_pairs()
+        self.aligned_by_retinanet = aligned_by_retinanet
 
     def read_pairs(self):
         """
@@ -75,8 +76,16 @@ class AsiaLegisDataSet(Dataset):
             }
         """
         entry = self.data_table[index]
-        f1_image = self.get_image(entry[1], entry[2])
-        f2_image = self.get_image(entry[3], entry[4])
+
+        def get_aligned_path(i):
+            return os.path.join(self.data_root, 'aligned_by_retinanet', f'{i:06d}.png')
+
+        if self.aligned_by_retinanet and os.path.exists(get_aligned_path(index * 2 + 1)):
+            f1_image = Image.open(get_aligned_path(index * 2))
+            f2_image = Image.open(get_aligned_path(index * 2 + 1))
+        else:
+            f1_image = self.get_image(entry[1], entry[2])
+            f2_image = self.get_image(entry[3], entry[4])
         is_same = entry[0]
         return {
             'f1': self.test_transform(f1_image),
