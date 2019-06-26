@@ -1,0 +1,10 @@
+{
+    "name": "CosFace_IR_SE50",
+    "arch": {
+        "type": "FaceModelIRSE",
+        "args": {
+            "head_type": "CosFace",
+            "backbone_weights": "../pretrained_weights/model_ir_se50.pth"
+        }
+    }
+}

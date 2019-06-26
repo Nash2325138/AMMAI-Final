@@ -233,10 +233,16 @@ class Am_softmax(Module):
 
 class FaceModelIRSE(BaseModel):
     def __init__(self, num_layers=50, drop_ratio=0.6, embedding_size=512, classnum=51332,
-                 backbone_weights=None):
+                 backbone_weights=None, head_type='ArcFace'):
         super().__init__()
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
-        self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+        if head_type == 'Arcface':
+            self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+        elif head_type == 'CosFace':
+            self.archead = Am_softmax(embedding_size=embedding_size, classnum=classnum)
+        else:
+            raise NotImplementedError()
+
         if backbone_weights is not None:
             logger.info(f'Loading {backbone_weights} into {self.__class__}')
             state = torch.load(backbone_weights)
