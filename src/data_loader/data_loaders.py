@@ -134,19 +134,29 @@ class AsiaCelebDataset(Dataset):
             self.length = self.num_classes
         else:
             self.length = sum(self.n_faces)
+            self.index_to_face_path = []
+            self.labels = []
+            for i, f in enumerate(self.folders):
+                for n in range(self.n_faces[i]):
+                    self.index_to_face_path.append(os.path.join(f, f'{n}.jpg'))
+                    self.labels.append(i)
+            assert len(self.index_to_face_path) == self.length
 
     def __getitem__(self, index):
         if self.uniform_on_person:
             face_idx = random.randint(0, self.n_faces[index] - 1)
             face_path = os.path.join(self.folders[index], f'{face_idx}.jpg')
-            face_image = Image.open(face_path)
-            face_tensor = self.train_transform(face_image)
-            return {
-                'face_tensor': face_tensor,
-                'faceID': index
-            }
+            label = index
         else:
-            raise NotImplementedError()
+            face_path = self.index_to_face_path[index]
+            label = self.labels[index]
+
+        face_image = Image.open(face_path)
+        face_tensor = self.train_transform(face_image)
+        return {
+            'face_tensor': face_tensor,
+            'faceID': label
+        }
 
     def __len__(self):
         return self.length
