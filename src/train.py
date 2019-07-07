@@ -33,7 +33,7 @@ def main(config, args):
         valid_data_loaders = [data_loader.split_validation()]
 
     # build model architecture
-    model = get_instance(module_arch, 'arch', config)
+    model = get_instance(module_arch, 'arch', config, classnum=data_loader.num_classes)
     model.summary()
 
     # setup instances of losses
@@ -70,9 +70,23 @@ def main(config, args):
 
     if args.mode == 'test':
         for loader in trainer.valid_data_loaders:
-            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to)
-    else:
+            trainer.verify(loader, load_from=args.load_from, save_to=args.save_to, verbosity=1)
+    elif args.mode == 'rolling_test':
+        from glob import glob
+        from itertools import count
+        ckpt_dir = os.path.dirname(args.resume)
+        for i in count(1):
+            candidates = glob(os.path.join(ckpt_dir, f'checkpoint-epoch{i}_*.pth'))
+            if len(candidates) == 0:
+                break
+            trainer._resume_checkpoint(candidates[0])
+            trainer.verify(
+                trainer.valid_data_loaders[0], epoch=i, verbosity=1,
+                save_to=os.path.join(trainer.checkpoint_dir, f'evaluator_save_epoch{i}.npz'))
+    elif args.mode == 'train':
         trainer.train()
+    else:
+        raise NotImplementedError()
 
 
 def extend_config(config, config_B):
@@ -99,7 +113,7 @@ def parse_args():
                         help='path to pretrained checkpoint (default: None)')
     parser.add_argument('-d', '--device', default=None, type=str,
                         help='indices of GPUs to enable (default: all)')
-    parser.add_argument('--mode', type=str, choices=['train', 'test'], default='train')
+    parser.add_argument('--mode', type=str, choices=['train', 'test', 'rolling_test'], default='train')
     parser.add_argument('--save_to', type=str, default=None)
     parser.add_argument('--load_from', type=str, default=None)
     args = parser.parse_args()

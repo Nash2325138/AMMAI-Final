@@ -20,13 +20,12 @@
         "save_dir": "saved/",
         "save_freq": 1,
         "verbosity": 2,
-        "monitor": "valid_seen_loss",
-        "monitor_mode": "min"
+        "monitor": "valid_auc",
+        "monitor_mode": "max"
     },
     "trainer_args": {
         "show_all_loss": true,
-        "log_step": 500,
-        "finetune_fc_epoch": 3
+        "log_step": 100
     },
     "visualization":{
         "tensorboardX": true,

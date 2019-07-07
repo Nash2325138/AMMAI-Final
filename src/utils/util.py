@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchvision import transforms as trans
 from PIL import Image
-from .logging import logger
+from .logging_config import logger
 
 
 def ensure_dir(path):

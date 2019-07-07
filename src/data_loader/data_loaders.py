@@ -1,5 +1,7 @@
 import os
 import sys
+import random
+from glob import glob
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))  # noqa
 
 from torch.utils.data.dataset import Dataset
@@ -31,7 +33,7 @@ class AsiaLegisDataLoader(BaseDataLoader):
 class AsiaLegisDataSet(Dataset):
     def __init__(
         self, data_root,
-        normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]
+        normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]], aligned_by_retinanet=False
     ):
         self.data_root = data_root
         self.test_transform = transforms.Compose([
@@ -40,6 +42,7 @@ class AsiaLegisDataSet(Dataset):
             transforms.Normalize(*normalization)
         ])  # Following https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/config.py
         self.data_table = self.read_pairs()
+        self.aligned_by_retinanet = aligned_by_retinanet
 
     def read_pairs(self):
         """
@@ -73,8 +76,16 @@ class AsiaLegisDataSet(Dataset):
             }
         """
         entry = self.data_table[index]
-        f1_image = self.get_image(entry[1], entry[2])
-        f2_image = self.get_image(entry[3], entry[4])
+
+        def get_aligned_path(i):
+            return os.path.join(self.data_root, 'aligned_by_retinanet', f'{i:06d}.png')
+
+        if self.aligned_by_retinanet and os.path.exists(get_aligned_path(index * 2 + 1)):
+            f1_image = Image.open(get_aligned_path(index * 2))
+            f2_image = Image.open(get_aligned_path(index * 2 + 1))
+        else:
+            f1_image = self.get_image(entry[1], entry[2])
+            f2_image = self.get_image(entry[3], entry[4])
         is_same = entry[0]
         return {
             'f1': self.test_transform(f1_image),
@@ -84,3 +95,77 @@ class AsiaLegisDataSet(Dataset):
 
     def __len__(self):
         return len(self.data_table)
+
+
+class AsiaCelebDataLoader(BaseDataLoader):
+    def __init__(
+        self, batch_size,
+        shuffle, validation_split,
+        num_workers, dataset_args={},
+        name='train'
+    ):
+        self.name = name
+        self.dataset = AsiaCelebDataset(**dataset_args)
+        self.num_classes = self.dataset.num_classes
+        super().__init__(
+            self.dataset, batch_size, shuffle,
+            validation_split, num_workers)
+
+
+class AsiaCelebDataset(Dataset):
+    """
+    A wrapper yeilding dictionary for ImageFolder dataste of Asis-celab.
+    """
+    def __init__(
+        self, data_root, normalization=[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]],
+        uniform_on_person=False, min_n_faces=10
+    ):
+        self.train_transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(*normalization)
+        ])
+        self.data_root = data_root
+
+        # statics about image folders
+        folders = sorted(glob(os.path.join(data_root, '*')))
+        n_faces = [len(glob(os.path.join(folder, '*'))) for folder in folders]
+
+        # filter out folders whose #images < min_n_faces
+        valid_folder_idxs = [i for i, n in enumerate(n_faces) if n >= min_n_faces]
+
+        self.folders = [folders[i] for i in valid_folder_idxs]
+        self.n_faces = [n_faces[i] for i in valid_folder_idxs]
+        self.num_classes = len(valid_folder_idxs)
+
+        self.uniform_on_person = uniform_on_person
+        if uniform_on_person:
+            self.length = self.num_classes
+        else:
+            self.length = sum(self.n_faces)
+            self.index_to_face_path = []
+            self.labels = []
+            for i, f in enumerate(self.folders):
+                for n in range(self.n_faces[i]):
+                    self.index_to_face_path.append(os.path.join(f, f'{n}.jpg'))
+                    self.labels.append(i)
+            assert len(self.index_to_face_path) == self.length
+
+    def __getitem__(self, index):
+        if self.uniform_on_person:
+            face_idx = random.randint(0, self.n_faces[index] - 1)
+            face_path = os.path.join(self.folders[index], f'{face_idx}.jpg')
+            label = index
+        else:
+            face_path = self.index_to_face_path[index]
+            label = self.labels[index]
+
+        face_image = Image.open(face_path)
+        face_tensor = self.train_transform(face_image)
+        return {
+            'face_tensor': face_tensor,
+            'faceID': label
+        }
+
+    def __len__(self):
+        return self.length

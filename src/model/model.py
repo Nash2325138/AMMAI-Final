@@ -10,6 +10,7 @@ from torch.nn import (Linear, Conv2d, BatchNorm1d, BatchNorm2d, PReLU, ReLU,
                       Sigmoid, Dropout, MaxPool2d, AdaptiveAvgPool2d,
                       Sequential, Module, Parameter)
 from collections import namedtuple
+from utils.logging_config import logger
 
 
 # Original Arcface Model, codes modified from https://github.com/TreB1eN/InsightFace_Pytorch/blob/master/model.py
@@ -232,17 +233,26 @@ class Am_softmax(Module):
 
 class FaceModelIRSE(BaseModel):
     def __init__(self, num_layers=50, drop_ratio=0.6, embedding_size=512, classnum=51332,
-                 backbone_weights=None):
+                 backbone_weights=None, head_type='ArcFace'):
         super().__init__()
         self.backbone = Backbone(num_layers=num_layers, drop_ratio=drop_ratio)
-        self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+        if head_type == 'ArcFace':
+            self.archead = Arcface(embedding_size=embedding_size, classnum=classnum, s=64., m=0.5)
+        elif head_type == 'CosFace':
+            self.archead = Am_softmax(embedding_size=embedding_size, classnum=classnum)
+        else:
+            raise NotImplementedError()
+
         if backbone_weights is not None:
+            logger.info(f'Loading {backbone_weights} into {self.__class__}')
             state = torch.load(backbone_weights)
             self.backbone.load_state_dict(state)
+        self.finetune_mode = ''
+        self.set_finetune_mode('all')
 
     def forward(self, data_input):
         x = data_input['face_tensor']
-        label = data_input['label']
+        label = data_input['faceID']
         embedding = self.embedding(x)
         logits = self.logits(embedding, label)
         return {
@@ -254,3 +264,18 @@ class FaceModelIRSE(BaseModel):
 
     def logits(self, embedding, label):
         return self.archead(embedding, label)
+
+    def set_finetune_mode(self, mode='all'):
+        if mode == self.finetune_mode:
+            return
+        if mode == 'all':
+            for param in self.parameters():
+                param.requires_grad = True
+        elif mode == 'head':
+            for param in self.parameters():
+                param.requires_grad = False
+            for param in self.archead.parameters():
+                param.requires_grad = True
+        else:
+            raise NotImplementedError()
+        self.finetune_mode = mode

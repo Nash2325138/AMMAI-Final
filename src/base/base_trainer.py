@@ -203,7 +203,8 @@ class BaseTrainer:
                 'Warning: Architecture configuration given in config file is different from that of checkpoint. '
                 'This may yield an exception while state_dict is being loaded.'
             )
-        self.model.load_state_dict(checkpoint['state_dict'])
+        model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+        model.load_state_dict(checkpoint['state_dict'])
 
         # load optimizer state from checkpoint only when optimizer type is not changed.
         if checkpoint['config']['optimizer']['type'] != self.config['optimizer']['type']:

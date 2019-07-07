@@ -29,6 +29,7 @@ class Trainer(BaseTrainer):
         self.log_step = log_step
         self.show_all_loss = show_all_loss
         self.evaluator = Evaluator()
+        self.n_tune_head_epoch = 5  # TODO: let it be configurable
 
     def _eval_metrics(self, data_input, model_output):
         acc_metrics = np.zeros(len(self.metrics))
@@ -36,6 +37,15 @@ class Trainer(BaseTrainer):
             acc_metrics[i] += metric(data_input, model_output)
             self.writer.add_scalar(f'{metric.__name__}', acc_metrics[i])
         return acc_metrics
+
+    def _set_finetune_mode(self, epoch):
+        model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+        if epoch <= self.n_tune_head_epoch:
+            mode = 'head'
+        else:
+            mode = 'all'
+        model.set_finetune_mode(mode)
+        self.logger.info(f'Now finetune mode: {mode}')
 
     def _train_epoch(self, epoch):
         """
@@ -53,8 +63,16 @@ class Trainer(BaseTrainer):
 
             The metrics in log must have the key 'metrics'.
         """
+
+        log = {}
+        if self.do_validation and epoch > self.n_tune_head_epoch:
+            for idx in range(len(self.valid_data_loaders)):
+                valid_log = self.verify(self.valid_data_loaders[idx], epoch=epoch)
+                log = {**log, **valid_log}
+
         np.random.seed()
         self.model.train()
+        self._set_finetune_mode(epoch)
         self.logger.info(f'Current lr: {get_lr(self.optimizer)}')
         epoch_start_time = time.time()
 
@@ -89,16 +107,12 @@ class Trainer(BaseTrainer):
                 )
                 self._write_tfboard(data_input, model_output)
 
-        log = {
+        train_log = {
             'epoch_time': time.time() - epoch_start_time,
             'loss': total_loss / len(self.data_loader),
             f'{self.data_loader.name}_metrics': (total_metrics / len(self.data_loader)).tolist()
         }
-
-        if self.do_validation:
-            for idx in range(len(self.valid_data_loaders)):
-                val_log = self._valid_epoch(epoch, idx)
-                log = {**log, **val_log}
+        log = {**log, **train_log}
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
@@ -153,18 +167,12 @@ class Trainer(BaseTrainer):
         }
 
     def _write_tfboard(self, data_input, model_output, n=4):
-        f1 = data_input['f1'][: n]
-        f2 = data_input['f2'][: n]
+        face_tensor = data_input['face_tensor'][: n]
+        self.writer.add_image('face_tensor', make_grid(face_tensor, nrow=4, normalize=True))
 
-        self.writer.add_image('f1', make_grid(f1, nrow=4, normalize=False))
-        self.writer.add_image('f2', make_grid(f2, nrow=4, normalize=False))
-        self.writer.add_text(', '.join(['same' if is_same else 'diff'
-                                        for is_same in data_input['is_same'][: n]]))
-
-    def verify(self, data_loader, load_from=None, save_to=None):
+    def verify(self, data_loader, load_from=None, save_to=None, epoch=0, verbosity=0):
 
         def collect():
-            self.evaluator.clear()
             self.model.eval()
             self.logger.info(f'Number of examples is around {data_loader.batch_size * len(data_loader)}')
             with torch.no_grad():
@@ -173,26 +181,36 @@ class Trainer(BaseTrainer):
                         value = data_input[key]
                         data_input[key] = value.to(self.device) if torch.is_tensor(value) else value
 
-                    source_embedding = self.model.embedding(data_input['f1'])
-                    target_embedding = self.model.embedding(data_input['f2'])
+                    model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+                    source_embedding = model.embedding(data_input['f1'])
+                    target_embedding = model.embedding(data_input['f2'])
                     self.evaluator.extend(source_embedding, target_embedding, data_input['is_same'])
-                    if batch_idx % 10 == 0:
+                    if batch_idx % 50 == 0:
                         self.logger.info(f'Entry {batch_idx * data_loader.batch_size} done.')
 
         def draw_curves():
             self.logger.info('Drawing curves...')
-            roc_curve_tensor = gen_roc_plot(fprs, tprs, return_tensor=True,
-                                            save_to=os.path.join(self.checkpoint_dir, 'ROC_curve.png'))
-            acc_curve_tensor = gen_acc_thres_plot(thresholds, accs, return_tensor=True,
-                                                  save_to=os.path.join(self.checkpoint_dir, 'acc_curve.png'))
+            roc_curve_tensor = gen_roc_plot(
+                fprs, tprs, return_tensor=True,
+                save_to=os.path.join(self.checkpoint_dir, f'ROC_curve_epoch{epoch}.png'))
+            acc_curve_tensor = gen_acc_thres_plot(
+                thresholds, accs, return_tensor=True,
+                save_to=os.path.join(self.checkpoint_dir, f'acc_curve_epoch{epoch}.png'))
             self.writer.add_image('Curves', make_grid([roc_curve_tensor, acc_curve_tensor], nrow=2))
 
-        self.writer.set_step(0, 'inference')
+        self.writer.set_step(epoch, 'inference')
         if load_from:
             self.evaluator.load_from(load_from)
         else:
+            self.evaluator.clear()
             collect()
         if save_to:
             self.evaluator.save_to(save_to)
-        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=50, strategy='cosine')
+
+        tprs, fprs, accs, thresholds = self.evaluator.calculate_roc(n_thres=100, strategy='cosine')
+        auc = self.evaluator.calculate_auc(tprs=tprs, fprs=fprs)
         draw_curves()
+        valid_log = {"valid_acc": accs.max(), "valid_auc": auc}
+        if verbosity > 0:
+            self.logger.info(valid_log)
+        return valid_log
